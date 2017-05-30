@@ -1,17 +1,19 @@
 # -*-coding:utf-8-*-
 #! /usr/bin/env python
 
-from bilstm import BiLSTM
+from bilstm_class.bilstm import BiLSTM
 # from random import shuffle
-from NegNN.utils.tools import shuffle, padding
-from NegNN.utils.metrics import *
-from NegNN.processors import int_processor
-from NegNN.processors import ext_processor
+from utils.tools import shuffle, padding
+from utils.metrics import *
+from processors import int_processor
+from processors import ext_processor
 import tensorflow as tf
 import sys
 import os
 import time
 import codecs
+import numpy
+from six.moves import xrange
 
 
 # Parameters
@@ -28,12 +30,12 @@ tf.flags.DEFINE_float("learning_rate", 1e-4, "Learning rate(default: 1e-4)")
 tf.flags.DEFINE_boolean("scope_detection", True, "True if the task is scope detection or joined scope/event detection")
 tf.flags.DEFINE_boolean("event_detection", False, "True is the task is event detection or joined scope/event detection")
 tf.flags.DEFINE_integer("POS_emb",0,"0: no POS embeddings; 1: normal POS; 2: universal POS")
-tf.flags.DEFINE_boolean("emb_update",False,"True if input embeddings should be updated (default: False)")
-tf.flags.DEFINE_boolean("normalize_emb",False,"True to apply L2 regularization on input embeddings (default: False)")
+tf.flags.DEFINE_boolean("emb_update",True,"True if input embeddings should be updated (default: False)")
+tf.flags.DEFINE_boolean("normalize_emb",True,"True to apply L2 regularization on input embeddings (default: False)")
 # Data Parameters
 tf.flags.DEFINE_string("test_set",'', "Path to the test filename (to use only in test mode")
 tf.flags.DEFINE_boolean("pre_training", False, "True to use pretrained embeddings")
-tf.flags.DEFINE_string("training_lang",'en', "Language of the tranining data (default: en)")
+tf.flags.DEFINE_string("training_lang",'en', "Language of the training data (default: en)")
 
 FLAGS = tf.flags.FLAGS
 FLAGS._parse_flags()
@@ -52,7 +54,7 @@ fold_name = "%s%s_%d%s" % ('PRE' if FLAGS.pre_training else "noPRE",
 'upd' if FLAGS.pre_training and FLAGS.emb_update else '',
 FLAGS.POS_emb,str(int(time.time())))
 out_dir = os.path.abspath(os.path.join(os.path.curdir, "NegNN","runs", fold_name))
-print "Writing to {}\n".format(out_dir)
+print("Writing to {}\n".format(out_dir))
 
 # Set checkpoint directory
 checkpoint_dir = os.path.abspath(os.path.join(out_dir, "checkpoints"))
@@ -85,7 +87,7 @@ def feeder(_bilstm, lex, cue, tags, _y, train = True):
     C = padding(cue, FLAGS.max_sent_length, 2)
     if tags != []: 
         T = padding(tags, FLAGS.max_sent_length, tag_voc_size - 1)
-    Y = padding(numpy.asarray(map(lambda x: [1,0] if x == 0 else [0,1],_y)).astype('int32'),FLAGS.max_sent_length,0,False)
+    Y = padding(numpy.asarray(list(map(lambda x: [1,0] if x == 0 else [0,1],_y))).astype('int32'),FLAGS.max_sent_length,0,False)
     _mask = [1 if t!=vocsize - 1 else 0 for t in X]
     feed_dict={
         _bilstm.x: X,
@@ -126,7 +128,7 @@ with tf.Graph().as_default():
         saver = tf.train.Saver()
 
         # Initialize all variables
-        sess.run(tf.initialize_all_variables())
+        sess.run(tf.global_variables_initializer())
 
         if FLAGS.pre_training:
             sess.run(bi_lstm._weights['w_emb'].assign(pre_emb_w))
@@ -134,6 +136,9 @@ with tf.Graph().as_default():
                 sess.run(bi_lstm._weights['t_emb'].assign(pre_emb_t))
 
         best_f1 = 0.0
+        precisions = []
+        recalls = []
+        f1_scores = []
         for e in xrange(FLAGS.num_epochs):
 
             # shuffle
@@ -151,9 +156,9 @@ with tf.Graph().as_default():
                     acc_train = feeder(bi_lstm, train_lex[i], train_cue[i], [], train_y[i])
                 # Calculating batch accuracy
                 train_tot_acc.append(acc_train)
-                print '[learning] epoch %i >> %2.2f%%'%(e,(i+1)*100./len(train_lex)),'completed in %.2f (sec) <<\r'%(time.time()-tic),
+                # print('[learning] epoch %i >> %2.2f%%'%(e,(i+1)*100./len(train_lex)),'completed in %.2f (sec) <<\r'%(time.time()-tic),)
                 sys.stdout.flush()               
-            print "TRAINING MEAN ACCURACY: ", sum(train_tot_acc)/len(train_lex)
+            # print("TRAINING MEAN ACCURACY: ", sum(train_tot_acc)/len(train_lex))
 
             # DEVELOPMENT STEP
             pred_dev = []
@@ -166,18 +171,19 @@ with tf.Graph().as_default():
                 dev_tot_acc.append(acc_dev)
                 pred_dev.append(pred[:len(valid_lex[i])])
                 gold_dev.append(Y_dev[:len(valid_lex[i])])
-            print 'DEV MEAN ACCURACY: ',sum(dev_tot_acc)/len(valid_lex)
-            f1,rep_dev,cm_dev = get_eval(pred_dev,gold_dev)
+            # print('DEV MEAN ACCURACY: ',sum(dev_tot_acc)/len(valid_lex))
+            print("epoch: ", e, "\ttook: ", time.time() - tic, "s")
+            f1, rep_dev, cm_dev, f1_pos = get_eval(pred_dev, gold_dev, precisions, recalls, f1_scores)
 
             # STORE INTERMEDIATE RESULTS
             if f1 > best_f1:
                 best_f1 = f1
-                print "Best f1 is: ",best_f1
+                print("Best f1 is: ",best_f1)
                 be = e
                 # store the model
                 checkpoint_prefix = os.path.join(checkpoint_dir, "model")
                 saver.save(sess, checkpoint_prefix,global_step=be)
-                print "Model saved."
+                print("Model saved.")
                 write_report(checkpoint_dir, rep_dev, cm_dev, 'dev')
                 store_prediction(checkpoint_dir, valid_lex, dic_inv, pred_dev, gold_dev, 'dev')
                 dry = 0
@@ -185,6 +191,19 @@ with tf.Graph().as_default():
                 dry += 1
 
             if abs(be-e) >= 10 and dry>=5:
-                print "Halving the lr..."
+                print("Halving the lr...")
                 clr *= 0.5
                 dry = 0
+
+        import matplotlib.pyplot as plt
+
+        fig, ax1 = plt.subplots()
+        precision_line, = ax1.plot(precisions, 'r', label='precision')
+        recall_line, = ax1.plot(recalls, 'g', label='recall')
+        f1_score_line, = ax1.plot(f1_scores, 'b', label='f1 score')
+        ax1.set_xlabel('epoch')
+        ax1.set_ylabel('metrics')
+        fig.legend((precision_line, recall_line, f1_score_line),
+                   ('precision', 'recall', 'f1 score'),
+                   'upper left')
+        fig.savefig(os.path.join(checkpoint_dir, 'plot.eps'))

@@ -2,7 +2,7 @@ from itertools import islice
 
 import random
 import tensorflow as tf
-import cPickle
+from six.moves import cPickle, xrange
 import numpy as np
 import os
 
@@ -90,5 +90,5 @@ def random_uniform(shape,name,low=-1.0,high=1.0,update=True):
     return  tf.Variable(0.2 * tf.random_uniform(shape, minval=low, maxval=high, dtype=tf.float32),name=name,trainable=update)
 
 def unpickle_data(folder):
-   with open(os.path.join(folder,'train_dev.pkl'),'wb') as f:
+   with open(os.path.join(folder,'train_dev.pkl'),'rb') as f:
         return cPickle.load(f)

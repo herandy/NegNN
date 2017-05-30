@@ -1,10 +1,11 @@
 # -*-coding:utf-8-*-
 #! /usr/bin/env python
 #
-from NegNN.reader.conll2obj import Data
-from NegNN.processors.utils import data2sents
+from reader.conll2obj import Data
+from processors.utils import data2sents
 import numpy as np
 import os
+from six.moves import reduce
 
 fn_training = os.path.abspath('NegNN/data/training/sherlock_train.txt')
 fn_dev = os.path.abspath('NegNN/data/dev/sherlock_dev.txt')

@@ -1,13 +1,13 @@
 # -*-coding:utf-8-*-
 #! /usr/bin/env python
 
-from NegNN.reader.conll2obj import Data
+from reader.conll2obj import Data
 from collections import Counter
 from itertools import chain
 from argparse import ArgumentParser
-from NegNN.processors.utils import data2sents
+from processors.utils import data2sents
 import os
-import cPickle
+from six.moves import cPickle, reduce
 import numpy as np
 import sys
 import codecs
@@ -61,10 +61,10 @@ def build_vocab(sents, tags, tags_uni, labels,lengths):
     y2idxs = {'I':0,'O':1,'E':2}
 
     voc,voc_inv = {},{}
-    voc['w2idxs'],voc_inv['idxs2w'] = w2idxs, {i: x for x,i in w2idxs.iteritems()}
-    voc['y2idxs'],voc_inv['idxs2y'] = y2idxs, {i: x for x,i in y2idxs.iteritems()}
-    voc['t2idxs'],voc_inv['idxs2t'] = t2idxs, {i: x for x,i in t2idxs.iteritems()}
-    voc['tuni2idxs'],voc_inv['idxs2tuni'] = tuni2idxs, {x: i for x,i in tuni2idxs.iteritems()}
+    voc['w2idxs'],voc_inv['idxs2w'] = w2idxs, {i: x for x,i in w2idxs.items()}
+    voc['y2idxs'],voc_inv['idxs2y'] = y2idxs, {i: x for x,i in y2idxs.items()}
+    voc['t2idxs'],voc_inv['idxs2t'] = t2idxs, {i: x for x,i in t2idxs.items()}
+    voc['tuni2idxs'],voc_inv['idxs2tuni'] = tuni2idxs, {x: i for x,i in tuni2idxs.items()}
  
     return voc,voc_inv
 
@@ -107,8 +107,8 @@ def package_data_train_dev(sent_ind_x,tag_ind_x,tag_uni_ind_x,sent_ind_y,cues_id
 
 def pickle_data(out_dir,data):
 
-    print "Storing data to %s..." % out_dir
+    print("Storing data to %s..." % out_dir)
     with open(os.path.join(out_dir,'train_dev.pkl'),'wb') as f:
         cPickle.dump(data,f)
-    print "Data stored!"
+    print("Data stored!")
 

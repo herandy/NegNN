@@ -19,7 +19,7 @@ def data2sents(sets,look_event,look_scope,lang):
         _prefix_three = ['dis','non']
         _suffix = ['less','lessness','lessly']
         
-        which_suff = map(lambda x: word.endswith(x),_suffix)
+        which_suff = list(map(lambda x: word.endswith(x),_suffix))
 
         if is_cue:
             if word.lower()[:2] in _prefix_two and len(word)>4:

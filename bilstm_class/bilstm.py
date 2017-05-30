@@ -1,8 +1,8 @@
 #-*- coding: utf-8-*-
 import tensorflow as tf
-from tensorflow.models.rnn import rnn, rnn_cell
-from NegNN.utils.metrics import *
-from NegNN.utils.tools import *
+# from tensorflow.models.rnn import rnn, rnn_cell
+from utils.metrics import *
+from utils.tools import *
 
 import numpy
 import random
@@ -78,9 +78,9 @@ class BiLSTM(object):
             self.pred = self.BiLSTMgraph(self.x, self.c, None, self.istate_fw, self.istate_bw, self._weights, self._biases)
 
         pred_mod = [tf.matmul(item, self._weights['out_w']) + self._biases['out_b'] for item in self.pred]
-        outputs = tf.squeeze(tf.pack(pred_mod))
+        outputs = tf.squeeze(tf.stack(pred_mod))
 
-        self.loss = tf.reduce_sum(tf.mul(tf.nn.softmax_cross_entropy_with_logits(outputs, self.y),self.mask))/tf.reduce_sum(self.mask) # softmax
+        self.loss = tf.reduce_sum(tf.multiply(tf.nn.softmax_cross_entropy_with_logits(logits=outputs, labels=self.y),self.mask))/tf.reduce_sum(self.mask) # softmax
 
         self.label_out = tf.nn.softmax(outputs,name="predictions")
 
@@ -89,7 +89,7 @@ class BiLSTM(object):
     def BiLSTMgraph(self, _X, _C, _T, _istate_fw, _istate_bw, _weights, _biases):
         # input: a [len_sent,len_seq] (e.g. 7x5)
         # transform into embeddings
-        if _T:
+        if _T is not None:
             emb_x = tf.nn.embedding_lookup(self._weights['w_emb'],_X)
             emb_c = tf.nn.embedding_lookup(self._weights['c_emb'],_C)
             emb_t = tf.nn.embedding_lookup(self._weights['t_emb'],_T)
@@ -103,13 +103,13 @@ class BiLSTM(object):
 
         # Define lstm cells with tensorflow
         # Forward direction cell
-        lstm_fw_cell = rnn_cell.BasicLSTMCell(self.num_hidden, forget_bias=1.0)
+        lstm_fw_cell = tf.contrib.rnn.BasicLSTMCell(self.num_hidden, forget_bias=1.0, state_is_tuple=False)
         # Backward direction cell
-        lstm_bw_cell = rnn_cell.BasicLSTMCell(self.num_hidden, forget_bias=1.0)
+        lstm_bw_cell = tf.contrib.rnn.BasicLSTMCell(self.num_hidden, forget_bias=1.0, state_is_tuple=False)
         # Split data because rnn cell needs a list of inputs for the RNN inner loop
-        _X = tf.split(0,self.sent_max_len,_X)
+        _X = tf.split(_X, int(self.sent_max_len), 0)
 
         # Get lstm cell output
-        outputs = rnn.bidirectional_rnn(lstm_fw_cell, lstm_bw_cell, _X,initial_state_fw = self.istate_fw, initial_state_bw=self.istate_bw, sequence_length = self.seq_len)
+        outputs, fw_cell, bw_cell = tf.contrib.rnn.static_bidirectional_rnn(lstm_fw_cell, lstm_bw_cell, _X, initial_state_fw=self.istate_fw, initial_state_bw=self.istate_bw, sequence_length=self.seq_len)
 
         return outputs
